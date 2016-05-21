@@ -1,0 +1,106 @@
+package cn.caht;
+
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.ArrayList;
+import java.util.List;
+
+import javax.swing.JList;
+
+public class TestSockServer {
+	static List<Client> clientList = new ArrayList<Client>();
+
+
+	public void init() {
+		ServerSocket server = null;
+		Socket socket = null;
+		try {
+			// 打开端口，等待服务器连接。
+			server = new ServerSocket(8888);
+			System.out.println("服务器已开启！");
+			// 服务端循环监听，若是有客户端连接，服务端接受并且创建一个线程，将连接通道socket放入该线程中，并启动线程。
+			while (true) {
+				socket = server.accept();
+				Client c = new TestSockServer().new Client(socket);
+				clientList.add(c);// 将新连接的客户端存入list中，以便于后面遍历发送信息。
+				c.start();
+			}
+
+		} catch (IOException e) {
+			System.out.println("server over!");
+		} finally {
+			try {
+				server.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	public static void main(String[] args) {
+		TestSockServer ts = new TestSockServer();
+		ts.init();
+	}
+
+	// 因为需要启用多个线程来完成客户端的连接，所以这里使用内部类。
+	class Client extends Thread {
+		String name = null;
+		Socket socket = null;
+		DataOutputStream dos = null;
+		DataInputStream dis = null;
+
+		// 使用带参数的构造方法来将通道放入线程中。
+		public Client(Socket socket) {
+			this.socket = socket;
+		}
+
+		@Override
+		public void run() {
+			String str;
+			try {
+				dos = new DataOutputStream(socket.getOutputStream());
+				dis = new DataInputStream(socket.getInputStream());
+				// 循环遍历用来接收某个客户端传来的信息，并且将这些信息遍历发送给各个客户端。
+				while (true) {
+					if ((str = dis.readUTF()) != null) {
+						if (str.startsWith("#")) {
+							name = str.substring(1);
+						} else {
+							// 判断数据格式，如以#开始
+							// 循环遍历将信息发送给所有客户端。
+							for (int i = 0; i < clientList.size(); i++) {
+								// 判断是否有昵称，有显示昵称，没有昵称显示端口号
+								if (name != null) {
+									new DataOutputStream(clientList.get(i).socket.getOutputStream())
+											.writeUTF(name + ":" + str);
+									
+								} else {
+									new DataOutputStream(clientList.get(i).socket.getOutputStream())
+											.writeUTF(socket.getPort() + ":" + str);
+								}
+							}
+						}
+					}
+				}
+			} catch (IOException e) {
+				System.out.println("客户端" + socket.getPort() + "退出");
+				clientList.remove(this);
+				// e.printStackTrace();
+			} finally {
+				// 关闭各种流
+				try {
+					dis.close();
+					dos.close();
+					socket.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+
+			}
+
+		}
+	}
+}
